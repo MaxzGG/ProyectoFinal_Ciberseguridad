@@ -210,3 +210,5 @@ do {
         default { Write-Host -ForegroundColor Red "Opción inválida. Intenta de nuevo (1-5)." }
     }
 } while ($opcion -ne "5")
+
+# ////////////////////////
