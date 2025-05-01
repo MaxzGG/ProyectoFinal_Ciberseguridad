@@ -1,0 +1,30 @@
+Modulo 1
+pip install requests 
+
+EJEMPLO DE ENTRADA // EXAMPLE INPUT
+8.8.8.8
+
+Modulo 2
+pip install requests
+
+EJEMPLO DE ENTRADA // EXAMPLE INPUT
+172.104.241.92
+
+Modulo 3
+pip install requests
+
+EJEMPLO DE ENTRADA // EXAMPLE INPUT
+Windows
+MacOs
+Linux
+
+Modulo 4
+pip install psutil
+
+Modulo 5
+pip install requests
+
+EJEMPLO DE ENTRADA // EXAMPLE INPUT
+https://www.youtube.com
+
+C:\Users\angel\OneDrive\Desktop\Le facultad\3 Semestre\Programacion2\PIA\Menu.py
