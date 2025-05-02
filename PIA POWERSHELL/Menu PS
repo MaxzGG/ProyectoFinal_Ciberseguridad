@@ -49,16 +49,15 @@ Si falla la carga, llama a Establecer-ValoresPorDefecto.
 function Cargar-Configuracion {
     if (Test-Path $Global:ConfigFile) {
         try {
-            # Usar -Encoding UTF8 para asegurar la correcta lectura
             $configJson = Get-Content -Path $Global:ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
             # Asignar valores cargados a variables globales si existen en el archivo
-            if ($configJson.PSObject.Properties.Name -contains 'ShodanApiKey') { $Global:ShodanApiKey = $configJson.ShodanApiKey } else { $Global:ShodanApiKey = $null } # Asegurar que existe
+            if ($configJson.PSObject.Properties.Name -contains 'ShodanApiKey') { $Global:ShodanApiKey = $configJson.ShodanApiKey } else { $Global:ShodanApiKey = $null }
             if ($configJson.PSObject.Properties.Name -contains 'PuertoScanTimeout') { $Global:PuertoScanTimeout = $configJson.PuertoScanTimeout }
             if ($configJson.PSObject.Properties.Name -contains 'PuertosComunes') { $Global:PuertosComunes = $configJson.PuertosComunes }
             if ($configJson.PSObject.Properties.Name -contains 'ExtensionesSospechosas') { $Global:ExtensionesSospechosas = $configJson.ExtensionesSospechosas }
             if ($configJson.PSObject.Properties.Name -contains 'UbicacionesSospechosas') { $Global:UbicacionesSospechosas = $configJson.UbicacionesSospechosas }
             if ($configJson.PSObject.Properties.Name -contains 'TamañoMinimoMB') { $Global:TamañoMinimoMB = $configJson.TamañoMinimoMB }
-            if ($configJson.PSObject.Properties.Name -contains 'TamañoMaximoMB') { $Global:TamañoMaximoMB = $configJson.TamañoMaximoMB } # Corregido: TamañoMaximoMB
+            if ($configJson.PSObject.Properties.Name -contains 'TamañoMaximoMB') { $Global:TamañoMaximoMB = $configJson.TamañoMaximoMB }
             if ($configJson.PSObject.Properties.Name -contains 'PuntajeUmbral') { $Global:PuntajeUmbral = $configJson.PuntajeUmbral }
             if ($configJson.PSObject.Properties.Name -contains 'VirusTotalApiKey') { $Global:VirusTotalApiKey = $configJson.VirusTotalApiKey }
             if ($configJson.PSObject.Properties.Name -contains 'RutaEscaneo') { $Global:RutaEscaneo = $configJson.RutaEscaneo }
@@ -101,7 +100,6 @@ function Guardar-Configuracion {
         RutaEscaneo            = $Global:RutaEscaneo
     }
     try {
-        # Usar -Encoding UTF8 para asegurar la correcta escritura
         $config | ConvertTo-Json -Depth 5 | Out-File -FilePath $Global:ConfigFile -Encoding UTF8 -Force
         # Write-Host "Configuración guardada en $($Global:ConfigFile)" -ForegroundColor Green
     } catch {
@@ -124,9 +122,9 @@ Los valores por defecto incluyen placeholders para las API Keys de Shodan y Viru
 Llama a Guardar-Configuracion después de establecer los valores.
 #>
 function Establecer-ValoresPorDefecto {
-    $Global:ShodanApiKey = "TU_API_KEY_SHODAN_AQUI" # <-- Añadir placeholder para Shodan
-    $Global:PuertoScanTimeout = 500 # Reducido el default para escaneo remoto
-    $Global:PuertosComunes = @(21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080) # Lista más común
+    $Global:ShodanApiKey = "TU_API_KEY_SHODAN_AQUI"
+    $Global:PuertoScanTimeout = 500
+    $Global:PuertosComunes = @(21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080)
     $Global:ExtensionesSospechosas = @(".exe", ".scr", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".lnk")
     $Global:UbicacionesSospechosas = @("C:\Users\Public", "$env:TEMP", "$env:APPDATA")
     $Global:TamañoMinimoMB = 0.01
@@ -134,12 +132,12 @@ function Establecer-ValoresPorDefecto {
     $Global:PuntajeUmbral = 3
     $Global:VirusTotalApiKey = "TU_API_KEY_VIRUSTOTAL_AQUI"
     $Global:RutaEscaneo = "C:\Users\Public"
-    # Guarda los valores por defecto si no existía el archivo o la carga falló
     Guardar-Configuracion
 }
 
 # --- Variables Globales Adicionales ---
 $Global:UltimosSospechosos = $null # Almacenará los resultados del último escaneo de archivos
+$Global:UltimosArchivosOcultos = $null # Almacenará los resultados del último listado de archivos ocultos
 
 # --- Cargar Configuración al Inicio ---
 Cargar-Configuracion
@@ -169,14 +167,11 @@ function Calcular-PuntajeSospecha {
 
     $puntaje = 0
 
-    # Verificar extensión sospechosa
     if ($Global:ExtensionesSospechosas -contains $Archivo.Extension.ToLower()) {
         $puntaje += 2
     }
 
-    # Verificar ubicación sospechosa
     foreach ($ubicacion in $Global:UbicacionesSospechosas) {
-        # Resolver variables de entorno en la ubicación configurada
         $ubicacionExpandida = $ExecutionContext.InvokeCommand.ExpandString($ubicacion)
         if ($Archivo.FullName.StartsWith($ubicacionExpandida, [System.StringComparison]::OrdinalIgnoreCase)) {
             $puntaje += 1
@@ -184,13 +179,89 @@ function Calcular-PuntajeSospecha {
         }
     }
 
-    # Verificar tamaño inusual
     $tamañoMB = $Archivo.Length / 1MB
-    if ($tamañoMB -lt $Global:TamañoMinimoMB -or $tamañoMB -gt $Global:TamañoMaximoMB) {
+    if ($tamañoMB -lt $Global:TamañoMinimoMB -or $tamañoMB -gt $Global::TamañoMaximoMB) {
         $puntaje += 1
     }
 
     return $puntaje
+}
+
+<#
+.SYNOPSIS
+Busca y lista archivos con el atributo 'Hidden' en la ruta especificada.
+
+.DESCRIPTION
+Esta función recorre recursivamente un directorio buscando archivos que tengan
+establecido el atributo 'Hidden'. Siempre mostrará los resultados en la consola
+y, opcionalmente, puede exportarlos a un archivo CSV.
+
+.PARAMETER Path
+La ruta del directorio donde se iniciará la búsqueda de archivos ocultos.
+Este parámetro es obligatorio.
+
+.PARAMETER OutputPath
+La ruta completa del archivo CSV donde se guardará el listado. Si este parámetro
+no se especifica, el listado solo se mostrará en la consola.
+
+.OUTPUTS
+System.IO.FileInfo[] o PSCustomObject[] - Un array de objetos que representan
+los archivos ocultos encontrados. La función devuelve $null si la ruta no existe o hay
+un error de búsqueda.
+
+.NOTES
+Utiliza Get-ChildItem con -Force y -Recurse para buscar en subdirectorios, incluyendo elementos ocultos/del sistema.
+Verifica el atributo 'Hidden' usando el operador bitwise AND.
+Puede requerir permisos elevados si se buscan archivos en directorios protegidos.
+Siempre muestra el listado en la consola si se encuentran archivos.
+#>
+function Get-HiddenFiles {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $false)]
+        [string]$OutputPath
+    )
+
+    # Verificar si la ruta existe y es un directorio
+    if (-Not (Test-Path -Path $Path -PathType Container)) {
+        Write-Error "La ruta especificada no existe o no es un directorio válido: '$Path'"
+        return $null
+    }
+
+    Write-Host "Buscando archivos ocultos en '$Path'..." -ForegroundColor Gray
+
+    $files = @()
+    try {
+        $files = Get-ChildItem -Path $Path -Recurse -Force -File | Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::Hidden) -eq [System.IO.FileAttributes]::Hidden }
+    } catch {
+        Write-Error "Error al buscar archivos ocultos en '{0}': {1}" -f $Path, $_.Exception.Message
+        return $null
+    }
+
+
+    if ($files.Count -eq 0) {
+        Write-Output "No se encontraron archivos ocultos en '$Path'."
+        return @()
+    } else {
+        Write-Host "$($files.Count) archivos ocultos encontrados en '$Path'." -ForegroundColor Green
+
+        # Mostrar en consola
+        Write-Host "`nArchivos Ocultos Encontrados:" -ForegroundColor White
+        $files | Select-Object FullName, Name, Length, LastWriteTime | Format-Table -AutoSize
+
+        # Si OutputPath está especificado, exportar a CSV
+        if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+             try {
+                $files | Select-Object FullName, Name, Length, LastWriteTime | Export-Csv -Path $OutputPath -NoTypeInformation -Encoding UTF8 -Force
+                Write-Output "Reporte de archivos ocultos generado en: $OutputPath" -ForegroundColor Green
+             } catch {
+                 Write-Error "No se pudo generar el reporte en '{0}': {1}" -f $OutputPath, $_.Exception.Message
+             }
+        }
+
+        return $files
+    }
 }
 
 <#
@@ -218,11 +289,11 @@ function Escanear-ArchivosSospechosos {
     # Asegurarse que la ruta existe antes de escanear
     if (-not (Test-Path -Path $Global:RutaEscaneo -PathType Container)) {
         Write-Error "La ruta de escaneo '$($Global:RutaEscaneo)' no es válida o no es un directorio."
-        return $null # Devolver null para indicar fallo
+        return $null
     }
 
     $archivos = Get-ChildItem -Path $Global:RutaEscaneo -Recurse -File -ErrorAction SilentlyContinue
-    $sospechosos = [System.Collections.Generic.List[PSCustomObject]]::new() # Usar lista genérica para mejor rendimiento
+    $sospechosos = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     Write-Host "Escaneando en $($Global:RutaEscaneo)..." -ForegroundColor Gray
     $totalArchivos = $archivos.Count
@@ -231,13 +302,12 @@ function Escanear-ArchivosSospechosos {
 
     if ($totalArchivos -eq 0) {
         Write-Host "No se encontraron archivos en la ruta especificada." -ForegroundColor Yellow
-        return $sospechosos # Devolver lista vacía
+        return $sospechosos
     }
 
     foreach ($archivo in $archivos) {
         $contador++
         $progresoActual = [math]::Floor(($contador / $totalArchivos) * 100)
-        # Actualizar progreso solo si cambia para evitar sobrecarga
         if ($progresoActual -gt $progreso) {
              Write-Progress -Activity "Escaneando Archivos" -Status "$progresoActual% Completado ($contador/$totalArchivos)" -PercentComplete $progresoActual
              $progreso = $progresoActual
@@ -246,18 +316,16 @@ function Escanear-ArchivosSospechosos {
         try {
             $puntaje = Calcular-PuntajeSospecha -Archivo $archivo
             if ($puntaje -ge $Global:PuntajeUmbral) {
-                $hashInfo = Get-FileHash -Path $archivo.FullName -Algorithm SHA256 -ErrorAction SilentlyContinue # Continuar si no se puede hashear
+                $hashInfo = Get-FileHash -Path $archivo.FullName -Algorithm SHA256 -ErrorAction SilentlyContinue
                 if ($hashInfo) {
                     $sospechosos.Add([PSCustomObject]@{
                         Ruta    = $archivo.FullName
                         Puntaje = $puntaje
                         Hash    = $hashInfo.Hash
-                        TamañoMB= [math]::Round($archivo.Length / 1MB, 2) # Añadir tamaño para referencia
+                        TamañoMB= [math]::Round($archivo.Length / 1MB, 2)
                     })
                 } else {
                      Write-Warning "No se pudo calcular el hash para '$($archivo.FullName)'."
-                     # Añadir sin hash si se quiere
-                     # $sospechosos.Add([PSCustomObject]@{ Ruta = $archivo.FullName; Puntaje = $puntaje; Hash = 'N/A'; TamañoMB = [math]::Round($archivo.Length / 1MB, 2)})
                 }
             }
         } catch {
@@ -265,7 +333,7 @@ function Escanear-ArchivosSospechosos {
         }
     }
     Write-Progress -Activity "Escaneando Archivos" -Completed
-    return $sospechosos # Devolver la lista
+    return $sospechosos
 }
 
 <#
@@ -316,8 +384,7 @@ function Consultar-VirusTotal {
     }
 
     try {
-        # Usar GET para 'report' en v2 según documentación
-        $respuesta = Invoke-RestMethod -Method Get -Uri $uri -Body $parameters -TimeoutSec 30 -ErrorAction Stop # Timeout añadido
+        $respuesta = Invoke-RestMethod -Method Get -Uri $uri -Body $parameters -TimeoutSec 30 -ErrorAction Stop
         return $respuesta
     } catch {
         $errorMessage = $_.Exception.Message
@@ -349,23 +416,16 @@ function Ejecutar-AnalisisDeArchivos {
     Write-Host "`nEjecutando Análisis de Archivos Sospechosos..." -ForegroundColor Yellow
     $sospechosos = Escanear-ArchivosSospechosos
 
-    # Verificar si el escaneo falló (e.g., ruta inválida)
     if ($null -eq $sospechosos) {
-        # El error se maneja dentro de Escanear-ArchivosSospechosos.
-        # Aquí solo limpiamos la lista global si falla.
-        # Write-Error "El escaneo de archivos no pudo completarse." # Comentado para evitar doble mensaje si Escanear-ArchivosSospechosos ya escribió el error
-        $Global:UltimosSospechosos = $null # Limpiar resultados previos si falla
+        $Global:UltimosSospechosos = $null
         return
     }
 
-    # Guardar los resultados en la variable global
     $Global:UltimosSospechosos = $sospechosos
 
     if ($Global:UltimosSospechosos -and $Global:UltimosSospechosos.Count -gt 0) {
-        Write-Host "`n$($Global:UltimosSospechosos.Count) Archivos Sospechosos Encontrados:" -ForegroundColor Red
-        $Global:UltimosSospechosos | Format-Table -AutoSize @{Label="Ruta"; Expression={$_.Ruta}}, @{Label="Puntaje"; Expression={$_.Puntaje}}, @{Label="Tamaño (MB)"; Expression={$_.TamañoMB}}
-        Write-Host "Puede ver esta lista de nuevo con la opción 'Ver Lista de Sospechosos'." -ForegroundColor Yellow
-        Write-Host "Puede enviar estos archivos a VirusTotal con la opción 'Enviar a VirusTotal'." -ForegroundColor Yellow
+        Write-Host "`n$($Global:UltimosSospechosos.Count) Archivos Sospechosos Encontrados." -ForegroundColor Red
+        Write-Host "Use la opción '1.3 Ver Lista de Archivos Sospechosos' para ver los detalles." -ForegroundColor Yellow
     } else {
         Write-Host "`nNo se encontraron archivos sospechosos con el umbral actual en '$($Global:RutaEscaneo)'." -ForegroundColor Green
     }
@@ -408,11 +468,10 @@ informa al usuario.
 function Ver-ListaSospechosos {
     Write-Host "`nLista de Archivos Sospechosos del Último Análisis:" -ForegroundColor Yellow
     if ($null -ne $Global:UltimosSospechosos -and $Global:UltimosSospechosos.Count -gt 0) {
-         # Seleccionar las columnas a mostrar
          $Global:UltimosSospechosos | Select-Object Ruta, Puntaje, Hash, TamañoMB | Format-Table -AutoSize
     } else {
         Write-Host "No hay resultados de análisis previos disponibles o no se encontraron archivos sospechosos." -ForegroundColor Green
-        Write-Host "Ejecuta primero el 'Escanear Archivos' (Opción 1.1)." -ForegroundColor Yellow
+        Write-Host "Ejecuta primero el 'Escanear Archivos Sospechosos' (Opción 1.1)." -ForegroundColor Yellow
     }
 }
 
@@ -434,16 +493,13 @@ Maneja archivos sin hash (saltándolos).
 function Enviar-AVirusTotal {
     Write-Host "`nEnviando hashes de archivos sospechosos a VirusTotal..." -ForegroundColor Yellow
 
-    # Usar la lista global en lugar de re-escanear
     $sospechosos = $Global:UltimosSospechosos
 
-    # Verificar si hay sospechosos del análisis previo
     if ($null -eq $sospechosos -or $sospechosos.Count -eq 0) {
-        Write-Warning "No hay archivos sospechosos en la lista del último análisis. Ejecuta primero 'Escanear Archivos' (Opción 1.1)."
+        Write-Warning "No hay archivos sospechosos en la lista del último análisis. Ejecuta primero 'Escanear Archivos Sospechosos' (Opción 1.1)."
         return
     }
 
-    # Verificar si la API Key está configurada ANTES de empezar el bucle
     if (-not $Global:VirusTotalApiKey -or $Global:VirusTotalApiKey -match "TU_API_KEY" -or [string]::IsNullOrWhiteSpace($Global:VirusTotalApiKey)) {
         Write-Error "Error: La API Key de VirusTotal no está configurada."
         Write-Warning "Por favor, configúrala en el menú 'Análisis de Archivos -> Configurar Filtros y Opciones'."
@@ -454,7 +510,6 @@ function Enviar-AVirusTotal {
     $contador = 0
     foreach ($archivo in $sospechosos) {
         $contador++
-        # Saltar si no hay hash
         if (-not $archivo.Hash -or $archivo.Hash -eq 'N/A') {
             Write-Warning "Saltando archivo sin hash: $($archivo.Ruta)"
             continue
@@ -465,9 +520,7 @@ function Enviar-AVirusTotal {
         $resultado = Consultar-VirusTotal -Hash $archivo.Hash
 
         if ($resultado -ne $null) {
-            # Analizar la respuesta de VirusTotal API v2
-            # Nota: response_code es un entero
-            if ($resultado.response_code -eq 1) { # response_code 1 significa que el hash está en VT
+            if ($resultado.response_code -eq 1) {
                  Write-Host "  Resultados:" -ForegroundColor White
                  Write-Host "    Positivos/Total AVs: $($resultado.positives) / $($resultado.total)"
                  Write-Host "    Fecha Escaneo VT: $($resultado.scan_date)"
@@ -477,9 +530,9 @@ function Enviar-AVirusTotal {
                  } else {
                      Write-Host "    No detectado como malicioso por los motores consultados." -ForegroundColor Green
                  }
-            } elseif ($resultado.response_code -eq 0) { # response_code 0 significa que el hash NO está en VT
+            } elseif ($resultado.response_code -eq 0) {
                  Write-Host "  El hash no fue encontrado en la base de datos de VirusTotal." -ForegroundColor Yellow
-            } else { # Otro código de respuesta (puede ser -2 para 'en cola')
+            } else {
                 Write-Warning "Respuesta de VirusTotal (código $($resultado.response_code)): $($resultado.verbose_msg)"
             }
         } else {
@@ -487,7 +540,6 @@ function Enviar-AVirusTotal {
         }
 
         # Pausa para cumplir con el límite de la API pública de VirusTotal (4 consultas por minuto)
-        # Si tienes una API privada, puedes ajustar o eliminar esto.
         if ($contador -lt $sospechosos.Count) {
             Write-Host "Esperando 15 segundos para la siguiente consulta (límite API pública VT)..." -ForegroundColor Gray
             Start-Sleep -Seconds 15
@@ -514,19 +566,17 @@ Opera sobre la lista almacenada en $Global:UltimosSospechosos.
 function Eliminar-ArchivosMaliciosos {
     Write-Host "`nEliminar Archivos Sospechosos (requiere confirmación)..." -ForegroundColor Red -BackgroundColor Black
 
-    # Usar la lista global en lugar de re-escanear
     $sospechosos = $Global:UltimosSospechosos
 
-     # Verificar si hay sospechosos del análisis previo
     if ($null -eq $sospechosos -or $sospechosos.Count -eq 0) {
-        Write-Warning "No hay archivos sospechosos en la lista del último análisis. Ejecuta primero 'Escanear Archivos' (Opción 1.1)."
+        Write-Warning "No hay archivos sospechosos en la lista del último análisis. Ejecuta primero 'Escanear Archivos Sospechosos' (Opción 1.1)."
         return
     }
 
     Write-Host "Se encontraron $($sospechosos.Count) archivos en la lista de sospechosos." -ForegroundColor Yellow
     Write-Warning "¡¡¡PRECAUCIÓN!!! Esta acción intentará ELIMINAR archivos permanentemente."
 
-    # Mostrar lista
+    Write-Host "Lista de Archivos a Revisar:" -ForegroundColor White
     $sospechosos | Format-Table -AutoSize Ruta, Puntaje, TamañoMB
 
     $confirmacionGeneral = Read-Host "¿Deseas proceder a revisar CADA archivo para eliminarlo individualmente? (s/n)"
@@ -535,7 +585,7 @@ function Eliminar-ArchivosMaliciosos {
         return
     }
 
-    $listaActualizada = $Global:UltimosSospechosos.Clone() # Clonar para poder modificarla mientras se itera
+    $listaActualizada = $Global:UltimosSospechosos.Clone()
 
     foreach ($archivo in $Global:UltimosSospechosos) {
         Write-Host "`nArchivo: $($archivo.Ruta)" -ForegroundColor White
@@ -547,14 +597,12 @@ function Eliminar-ArchivosMaliciosos {
         }
 
         if ($confirmacion -eq "s") {
-            # Doble confirmación para seguridad extra
             $confirmacion2 = Read-Host "¿Estás ABSOLUTAMENTE SEGURO de querer eliminar '$($archivo.Ruta)'? (s/n)"
             if ($confirmacion2 -eq 's') {
                  try {
                     Write-Host "Intentando eliminar '$($archivo.Ruta)'..." -ForegroundColor Magenta
                     Remove-Item -Path $archivo.Ruta -Force -ErrorAction Stop
                     Write-Host " Archivo eliminado exitosamente." -ForegroundColor Green
-                    # Quitarlo de la lista clonada que representa el estado actual
                     $itemToRemove = $listaActualizada | Where-Object { $_.Ruta -eq $archivo.Ruta }
                     if ($itemToRemove) { $listaActualizada.Remove($itemToRemove) }
                  } catch {
@@ -567,80 +615,21 @@ function Eliminar-ArchivosMaliciosos {
 
         } elseif ($confirmacion -eq "c") {
             Write-Host "Operación de eliminación cancelada por el usuario." -ForegroundColor Yellow
-            $Global:UltimosSospechosos = $listaActualizada # Actualizar la lista global con los que quedaron
+            $Global:UltimosSospechosos = $listaActualizada
             return
         }
-         else { # 'n'
+         else {
             Write-Host " Eliminación omitida para este archivo." -ForegroundColor Yellow
         }
     }
 
-     $Global:UltimosSospechosos = $listaActualizada # Actualizar la lista global con los que quedaron
+     $Global:UltimosSospechosos = $listaActualizada
      Write-Host "`nProceso de revisión para eliminación completado." -ForegroundColor Green
      if ($Global:UltimosSospechosos.Count -gt 0) {
          Write-Host "Quedan $($Global:UltimosSospechosos.Count) archivos en la lista de sospechosos."
      } else {
          Write-Host "La lista de sospechosos está ahora vacía."
      }
-}
-
-<#
-.SYNOPSIS
-Muestra el submenú de opciones para el Análisis de Archivos.
-
-.DESCRIPTION
-Presenta al usuario las opciones disponibles para el análisis de archivos,
-como escanear, configurar filtros, ver la lista de sospechosos, enviar a
-VirusTotal y eliminar archivos. Incluye un espacio para una futura opción
-de listado de archivos ocultos. Ejecuta la función correspondiente a la
-opción seleccionada.
-
-.NOTES
-Este menú es parte de la interfaz interactiva principal del script.
-Permite volver al menú principal con la opción 0.
-#>
-function Mostrar-Submenu1 {
-    do {
-        Write-Host "`n--- Análisis de Archivos ---" -ForegroundColor Cyan
-        Write-Host "1.1 Escanear Archivos Sospechosos"
-        Write-Host "1.2 Configurar Filtros y Opciones"
-        Write-Host "1.3 Ver Lista de Sospechosos (del último escaneo)"
-        Write-Host "1.4 Enviar Hashes de Sospechosos a VirusTotal"
-        Write-Host "1.5 Eliminar Archivos Sospechosos (con confirmación)"
-        Write-Host "1.6 Listado de Archivos Ocultos (No implementado)" # Nueva opción
-        Write-Host "0. Volver al menú principal"
-        Write-Host "--------------------------" -ForegroundColor Cyan
-        # Updated Read-Host prompt to include the new option 6
-        $subopcion = Read-Host "Elige una opción (0-6)"
-        switch ($subopcion) {
-            "1" { Ejecutar-AnalisisDeArchivos }
-            "2" { Configurar-FiltrosAnalisisArchivos }
-            "3" { Ver-ListaSospechosos }
-            "4" { Enviar-AVirusTotal }
-            "5" { Eliminar-ArchivosMaliciosos }
-            "6" {
-                # --- Espacio para implementar la funcionalidad de Listado de Archivos Ocultos ---
-                Write-Host "`nOpción 'Listado de Archivos Ocultos' seleccionada." -ForegroundColor Yellow
-                Write-Host "Esta funcionalidad aún no está implementada." -ForegroundColor Yellow
-                # Aquí iría el código para buscar y mostrar archivos ocultos
-                # Por ejemplo:
-                # try {
-                #     $rutaBusqueda = $Global:RutaEscaneo # Podrías usar la ruta de escaneo actual
-                #     if (-not (Test-Path -Path $rutaBusqueda -PathType Container)) {
-                #         Write-Warning "La ruta de búsqueda '$rutaBusqueda' no es válida. Usando el directorio actual."
-                #         $rutaBusqueda = "."
-                #     }
-                #     Write-Host "Buscando archivos ocultos en '$rutaBusqueda'..."
-                #     Get-ChildItem -Path $rutaBusqueda -Recurse -Force | Where-Object { $_.Attributes -band [System.IO.FileAttributes]::Hidden } | Format-Table FullName, Attributes
-                # } catch {
-                #     Write-Error "Ocurrió un error al buscar archivos ocultos: $($_.Exception.Message)"
-                # }
-                # --- Fin del espacio para implementación ---
-            }
-            "0" { return }
-            default { Write-Warning "Opción inválida." }
-        }
-    } while ($true)
 }
 
 <#
@@ -675,7 +664,6 @@ function Mostrar-MenuConfiguracionArchivos {
         switch ($opcion) {
             "1" {
                 $extensionesInput = Read-Host "Ingresa las extensiones separadas por comas (ej: .exe,.dll,.bat)"
-                # Validar formato de extensión (debe empezar con .)
                 $nuevasExtensiones = $extensionesInput.Split(",") | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ -like '.*' -and $_.Length -gt 1}
                 if ($nuevasExtensiones) {
                     $Global:ExtensionesSospechosas = $nuevasExtensiones
@@ -689,8 +677,6 @@ function Mostrar-MenuConfiguracionArchivos {
                 $ubicacionesInput = Read-Host "Ingresa las rutas separadas por comas (ej: C:\Temp,`$env:APPDATA\Roaming)"
                 $nuevasUbicaciones = $ubicacionesInput.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
                  if ($nuevasUbicaciones) {
-                    # Se podría añadir validación Test-Path para cada una si se desea, pero puede ser lento.
-                    # Por ahora, confiamos en la entrada del usuario.
                     $Global:UbicacionesSospechosas = $nuevasUbicaciones
                     Write-Host "Ubicaciones actualizadas." -ForegroundColor Green
                     Guardar-Configuracion
@@ -700,9 +686,7 @@ function Mostrar-MenuConfiguracionArchivos {
             }
             "3" {
                 $minimoInput = Read-Host "Ingresa el tamaño mínimo en MB (ej: 0.01)"
-                # Initialize variable before TryParse
-                [double]$minimoDouble = 0 # <-- Inicializar variable
-                # Usar CultureInfo Invariant para asegurar que el punto sea el decimal
+                [double]$minimoDouble = 0 # Inicializar la variable
                 if ([double]::TryParse($minimoInput, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minimoDouble) -and $minimoDouble -ge 0) {
                      $Global:TamañoMinimoMB = $minimoDouble
                      Write-Host "Tamaño mínimo actualizado a $Global:TamañoMinimoMB MB." -ForegroundColor Green
@@ -713,8 +697,7 @@ function Mostrar-MenuConfiguracionArchivos {
             }
             "4" {
                  $maximoInput = Read-Host "Ingresa el tamaño máximo en MB (ej: 100)"
-                 # Initialize variable before TryParse
-                 [double]$maximoDouble = 0 # <-- Inicializar variable
+                 [double]$maximoDouble = 0 # Inicializar la variable
                  if ([double]::TryParse($maximoInput, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$maximoDouble) -and $maximoDouble -gt 0) {
                      if ($maximoDouble -ge $Global:TamañoMinimoMB) {
                         $Global:TamañoMaximoMB = $maximoDouble
@@ -729,6 +712,7 @@ function Mostrar-MenuConfiguracionArchivos {
             }
             "5" {
                 $umbralInput = Read-Host "Ingresa el puntaje umbral (número entero >= 0, ej: 3)"
+                [int]$umbralInt = 0 # <<-- ¡Inicializar la variable aquí!
                 if ([int]::TryParse($umbralInput, [ref]$umbralInt) -and $umbralInt -ge 0) {
                     $Global:PuntajeUmbral = $umbralInt
                     Write-Host "Puntaje umbral actualizado a $Global:PuntajeUmbral." -ForegroundColor Green
@@ -740,18 +724,14 @@ function Mostrar-MenuConfiguracionArchivos {
             "6" {
                 $rutaInput = Read-Host "Ingresa la nueva ruta de escaneo (ej: C:\Users\Public)"
                 if (-not [string]::IsNullOrWhiteSpace($rutaInput)) {
-                    # Validar que la ruta existe y es un directorio al momento de configurar
                     if (Test-Path -Path $rutaInput -PathType Container) {
                         $Global:RutaEscaneo = $rutaInput
                         Write-Host "Ruta de escaneo actualizada a '$Global:RutaEscaneo'." -ForegroundColor Green
                         Guardar-Configuracion
                     } else {
-                         # Permitir configurar rutas que podrían crearse después, pero advertir.
                          Write-Warning "La ruta '$rutaInput' no existe actualmente o no es un directorio. Se guardará, pero el escaneo fallará si no es válida al ejecutar."
                          $Global:RutaEscaneo = $rutaInput
                          Guardar-Configuracion
-                         # O podrías ser más estricto:
-                         # Write-Error "La ruta '$rutaInput' no existe o no es un directorio válido. No se guardó."
                     }
                 } else {
                     Write-Warning "La ruta no puede estar vacía."
@@ -767,8 +747,98 @@ function Mostrar-MenuConfiguracionArchivos {
                     Write-Host "API Key no modificada." -ForegroundColor Yellow
                 }
             }
-            "0" { return } # <-- Cambiado break a return
+            "0" { return }
             default { Write-Warning "Opción no válida." }
+        }
+    } while ($true)
+}
+
+<#
+.SYNOPSIS
+Muestra el submenú de opciones para el Análisis de Archivos.
+
+.DESCRIPTION
+Presenta al usuario las opciones disponibles para el análisis de archivos,
+como escanear, configurar filtros, ver la lista de sospechosos, enviar a
+VirusTotal, eliminar archivos y listar/ver archivos ocultos. Ejecuta la
+función correspondiente a la opción seleccionada.
+
+.NOTES
+Este menú es parte de la interfaz interactiva principal del script.
+Permite volver al menú principal con la opción 0.
+Las opciones 1.1 y 1.6 realizan escaneos/listados, pero la visualización detallada
+de los resultados se hace con las opciones 1.3 y 1.7 respectivamente.
+#>
+function Mostrar-Submenu1 {
+    do {
+        Write-Host "`n--- Análisis de Archivos ---" -ForegroundColor Cyan
+        Write-Host "1.1 Escanear Archivos Sospechosos"
+        Write-Host "1.2 Configurar Filtros y Opciones"
+        Write-Host "1.3 Ver Lista de Archivos Sospechosos (del último escaneo)"
+        Write-Host "1.4 Enviar Hashes de Sospechosos a VirusTotal"
+        Write-Host "1.5 Eliminar Archivos Sospechosos (con confirmación)"
+        Write-Host "1.6 Listado de Archivos Ocultos (Buscar y Mostrar/Guardar)"
+        Write-Host "1.7 Ver Lista de Archivos Ocultos (del último listado)" # Nueva opción
+        Write-Host "0. Volver al menú principal"
+        Write-Host "--------------------------" -ForegroundColor Cyan
+        $subopcion = Read-Host "Elige una opción (0-7)" # Rango actualizado
+        switch ($subopcion) {
+            "1" {
+                Ejecutar-AnalisisDeArchivos
+                # La visualización se hace con la opción 1.3 ahora
+            }
+            "2" { Configurar-FiltrosAnalisisArchivos }
+            "3" { Ver-ListaSospechosos }
+            "4" { Enviar-AVirusTotal }
+            "5" { Eliminar-ArchivosMaliciosos }
+            "6" {
+                Write-Host "`n--- Listado de Archivos Ocultos ---" -ForegroundColor Yellow
+
+                $scanPath = $Global:RutaEscaneo
+
+                $useDefaultPath = Read-Host "Usar la ruta de escaneo configurada ('$scanPath') para buscar ocultos? (s/n)"
+                if ($useDefaultPath -ne 's') {
+                    $customPath = Read-Host "Ingresa la ruta donde buscar archivos ocultos (Enter para cancelar)"
+                    if (-not [string]::IsNullOrWhiteSpace($customPath)) {
+                        $scanPath = $customPath.Trim()
+                    } else {
+                        Write-Warning "No se especificó una ruta. Operación de listado de ocultos cancelada."
+                        break
+                    }
+                }
+
+                $saveToFile = Read-Host "¿Guardar el listado en un archivo CSV? (s/n)"
+                $outputPath = $null
+                if ($saveToFile -eq 's') {
+                    $defaultFileName = "HiddenFilesReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
+                    $outputDir = $ScriptDir
+                    $fullOutputPath = Join-Path -Path $outputDir -ChildPath $defaultFileName
+
+                    $outputPathInput = Read-Host "Ingresa la ruta completa para guardar el reporte (Enter para usar por defecto: '$fullOutputPath')"
+                    if (-not [string]::IsNullOrWhiteSpace($outputPathInput)) {
+                        $outputPath = $outputPathInput.Trim()
+                    } else {
+                        $outputPath = $fullOutputPath
+                    }
+                }
+
+                Write-Host "" # Línea en blanco antes de la salida de la función
+                # Llamar a la función Get-HiddenFiles y almacenar su resultado en la variable global
+                $Global:UltimosArchivosOcultos = Get-HiddenFiles -Path $scanPath -OutputPath $outputPath
+
+                Write-Host "`nListado de archivos ocultos completado." -ForegroundColor Yellow
+            }
+            "7" { # Nuevo caso 7: Ver último listado de archivos ocultos
+                 Write-Host "`nLista de Archivos Ocultos del Último Listado:" -ForegroundColor Yellow
+                 if ($null -ne $Global:UltimosArchivosOcultos -and $Global:UltimosArchivosOcultos.Count -gt 0) {
+                      $Global:UltimosArchivosOcultos | Select-Object FullName, Name, Length, LastWriteTime | Format-Table -AutoSize
+                 } else {
+                     Write-Host "No hay resultados de listado de archivos ocultos previos disponibles." -ForegroundColor Green
+                     Write-Host "Ejecuta primero 'Listado de Archivos Ocultos' (Opción 1.6)." -ForegroundColor Yellow
+                 }
+            }
+            "0" { return }
+            default { Write-Warning "Opción inválida." }
         }
     } while ($true)
 }
@@ -797,16 +867,14 @@ function Obtener-InformeSeguridadLocal {
      Write-Host "`nInforme de Seguridad Local:" -ForegroundColor Cyan
      Write-Host "==================================="
 
-     # --- Políticas de Contraseñas y Bloqueo ---
+     # Políticas de Contraseñas y Bloqueo
      Write-Host "`nPolíticas de Contraseñas y Bloqueo de Cuenta (requiere permisos elevados):" -ForegroundColor Green
      $cfgFile = Join-Path -Path $env:TEMP -ChildPath "secpol_export.cfg"
-     # Intentar exportar silenciosamente
      secedit /export /cfg $cfgFile /quiet | Out-Null
-     Start-Sleep -Milliseconds 500 # Dar tiempo a que se escriba el archivo
+     Start-Sleep -Milliseconds 500
      if (Test-Path $cfgFile) {
          try {
-             # Especificar codificación que usa secedit (puede variar, probar Default, OEM, UTF8)
-             $encoding = [System.Text.Encoding]::Default
+             $encoding = [System.Text.Encoding]::Default # Codificación usada por secedit
              $contenido = Get-Content $cfgFile -Encoding $encoding
              $politicas = $contenido | Where-Object { $_ -match '^\s*(MinimumPasswordLength|MaximumPasswordAge|MinimumPasswordAge|PasswordHistorySize|LockoutBadCount|LockoutDuration|ResetLockoutCount)\s*=\s*\d+' }
              if ($politicas) {
@@ -815,7 +883,6 @@ function Obtener-InformeSeguridadLocal {
                  Write-Host "  No se encontraron políticas relevantes o el archivo está vacío/formato inesperado." -ForegroundColor Yellow
              }
          } catch {
-              # Corrected line using -f format operator
               Write-Warning "Error al leer el archivo {0}: {1}" -f $cfgFile, $_.Exception.Message
          } finally {
              Remove-Item $cfgFile -Force -ErrorAction SilentlyContinue
@@ -824,7 +891,7 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudo exportar la configuración de seguridad local (secedit). Ejecuta como Administrador."
      }
 
-     # --- Control de Cuentas de Usuario (UAC) ---
+     # Control de Cuentas de Usuario (UAC)
      Write-Host "`nControl de Cuentas de Usuario (UAC):" -ForegroundColor Green
      try {
          $uacEnabled = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -ErrorAction Stop
@@ -838,10 +905,9 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudo obtener el estado de UAC desde el registro."
      }
 
-     # --- Configuración de Auditoría (Ejemplo básico - política de inicio de sesión) ---
+     # Configuración de Auditoría (Ejemplo básico - política de inicio de sesión)
      Write-Host "`nConfiguración de Auditoría (Ejemplo: Auditoría de Inicio de Sesión - requiere permisos elevados):" -ForegroundColor Green
      try {
-         # Necesita parsear la salida de auditpol
          $auditOutput = auditpol /get /subcategory:"Inicio de sesión" /r
          if ($auditOutput) {
             $csvAudit = $auditOutput | ConvertFrom-Csv
@@ -854,7 +920,7 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudo obtener la política de auditoría (auditpol). Ejecuta como Administrador. Error: $($_.Exception.Message)"
      }
 
-     # --- Configuración del Firewall ---
+     # Configuración del Firewall
      Write-Host "`nConfiguración del Firewall de Windows Defender:" -ForegroundColor Green
      try {
          $profiles = Get-NetFirewallProfile -ErrorAction Stop
@@ -865,7 +931,7 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudo obtener la configuración del firewall (Get-NetFirewallProfile). Error: $($_.Exception.Message)"
      }
 
-     # --- Reglas activas del Firewall (algunas, como ejemplo) ---
+     # Reglas activas del Firewall (algunas, como ejemplo)
      Write-Host "`nReglas Activas del Firewall (Primeras 5 de cada tipo):" -ForegroundColor Green
      try {
          Write-Host "  Reglas de Entrada Permitidas:"
@@ -878,15 +944,12 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudo recuperar las reglas del firewall (Get-NetFirewallRule). Error: $($_.Exception.Message)"
      }
 
-     # --- Puertos TCP en Escucha (Listening) ---
+     # Puertos TCP en Escucha (Listening)
      Write-Host "`nPuertos TCP Abiertos Localmente (Estado: Listen):" -ForegroundColor Green
      try {
          $tcpListeners = Get-NetTCPConnection -State Listen -ErrorAction Stop
          if ($tcpListeners) {
-             # Mostrar con ID de proceso
              $tcpListeners | Select-Object LocalAddress, LocalPort, OwningProcess | Format-Table -AutoSize
-             # Opcional: Intentar obtener nombre de proceso (más lento y puede fallar por permisos)
-             # $tcpListeners | Select-Object LocalAddress, LocalPort, @{Name='ProcessName';Expression={try{(Get-Process -Id $_.OwningProcess -ErrorAction Stop).ProcessName}catch{'N/A'}}} | Format-Table -AutoSize
          } else {
              Write-Host "  No se encontraron puertos TCP en estado Listen." -ForegroundColor Green
          }
@@ -894,15 +957,12 @@ function Obtener-InformeSeguridadLocal {
          Write-Warning "No se pudieron obtener conexiones TCP (Get-NetTCPConnection). Error: $($_.Exception.Message)"
      }
 
-     # --- Puertos UDP en Escucha ---
+     # Puertos UDP en Escucha
      Write-Host "`nPuertos UDP Abiertos Localmente (Endpoints):" -ForegroundColor Green
      try {
          $udpListeners = Get-NetUDPEndpoint -ErrorAction Stop
           if ($udpListeners) {
-             # Mostrar con ID de proceso
              $udpListeners | Select-Object LocalAddress, LocalPort, OwningProcess | Format-Table -AutoSize
-             # Opcional: Intentar obtener nombre de proceso
-             # $udpListeners | Select-Object LocalAddress, LocalPort, @{Name='ProcessName';Expression={try{(Get-Process -Id $_.OwningProcess -ErrorAction Stop).ProcessName}catch{'N/A'}}} | Format-Table -AutoSize
          } else {
              Write-Host "  No se encontraron endpoints UDP locales." -ForegroundColor Green
          }
@@ -913,8 +973,6 @@ function Obtener-InformeSeguridadLocal {
      Write-Host "==================================="
 }
 
-
-# --- IMPLEMENTACIÓN Escanear-PuertosComunes ---
 
 <#
 .SYNOPSIS
@@ -949,13 +1007,11 @@ function Escanear-PuertosComunes {
 
     Write-Host "`nIniciando escaneo de puertos comunes en '$HostName'..." -ForegroundColor Yellow
 
-    # Intentar resolver el HostName a IP (maneja si ya es IP)
+    # Intentar resolver el HostName a IP
     $ipAddress = $null
     try {
-        # Obtener la primera dirección IPv4 si es posible
         $ipAddress = ([System.Net.Dns]::GetHostAddresses($HostName) | Where-Object {$_.AddressFamily -eq 'InterNetwork'} | Select-Object -First 1).IPAddressToString
         if (-not $ipAddress) {
-            # Si no hay IPv4, tomar la primera que encuentre (puede ser IPv6)
              $ipAddress = ([System.Net.Dns]::GetHostAddresses($HostName) | Select-Object -First 1).IPAddressToString
         }
         Write-Host "Resolviendo '$HostName' a '$ipAddress'" -ForegroundColor Gray
@@ -983,44 +1039,34 @@ function Escanear-PuertosComunes {
         $resultado = $false
 
         try {
-            # Iniciar conexión asíncrona
             $conexion = $tcpClient.ConnectAsync($ipAddress, $puerto)
-            # Esperar el timeout especificado
             $resultado = $conexion.Wait($TimeoutMs)
 
             if ($resultado) {
-                # Conexión exitosa dentro del timeout
                 Write-Host "`r  Puerto $puerto : Abierto      " -ForegroundColor Green
                 $puertosAbiertos += $puerto
-                $tcpClient.Close() # Cerrar la conexión establecida
+                $tcpClient.Close()
             } else {
-                # Timeout alcanzado
                 Write-Host "`r  Puerto $puerto : Timeout/Filtrado" -ForegroundColor Yellow
                 $puertosCerrados += "$puerto (Timeout)"
-                $tcpClient.Close() # Asegurar cierre aunque haya timeout
+                $tcpClient.Close()
             }
         } catch [System.Net.Sockets.SocketException] {
-            # Conexión rechazada explícitamente (puerto cerrado) o error de red
             if ($_.Exception.SocketErrorCode -eq 'ConnectionRefused') {
                 Write-Host "`r  Puerto $puerto : Cerrado (Rechazado)" -ForegroundColor Red
                 $puertosCerrados += "$puerto (Cerrado)"
             } elseif ($_.Exception.Sockets.SocketErrorCode -eq 'HostUnreachable' -or $_.Exception.Sockets.SocketErrorCode -eq 'NetworkUnreachable') {
                  Write-Host "`r  Puerto $puerto : Host/Red Inaccesible" -ForegroundColor DarkRed
                  $puertosCerrados += "$puerto (Inaccesible)"
-                 # Podríamos parar aquí si el host es inaccesible
-                 # break
             } else {
                  Write-Host "`r  Puerto $puerto : Error ($($_.Exception.SocketErrorCode))" -ForegroundColor DarkRed
                  $puertosCerrados += "$puerto (Error: $($_.Exception.SocketErrorCode))"
             }
         } catch {
-            # Otro tipo de error
             Write-Host "`r  Puerto $puerto : Error Desconocido" -ForegroundColor DarkRed
-            # Corrected line using -f format operator
             Write-Warning "Error inesperado escaneando puerto {0}: {1}" -f $puerto, $_.Exception.Message
             $puertosCerrados += "$puerto (Error Desc.)"
         } finally {
-            # Asegurar que el objeto TcpClient se libere
             if ($tcpClient -ne $null) {
                 $tcpClient.Dispose()
             }
@@ -1034,15 +1080,8 @@ function Escanear-PuertosComunes {
     } else {
         Write-Host " No se encontraron puertos abiertos en la lista común." -ForegroundColor Yellow
     }
-    # Opcional: Mostrar cerrados/timeout si se desea
-    # if ($puertosCerrados.Count -gt 0) {
-    #    Write-Host " Puertos Cerrados/Timeout/Error:" -ForegroundColor Gray
-    #    Write-Host "  $($puertosCerrados -join ', ')"
-    # }
 }
 
-
-# --- IMPLEMENTACIÓN Monitorear-Red-Shodan ---
 
 <#
 .SYNOPSIS
@@ -1065,7 +1104,7 @@ Maneja errores de la API de Shodan (ej. IP no encontrada, error de autenticació
 function Monitorear-Red-Shodan {
     param(
         [Parameter(Mandatory=$true)]
-        [string]$ConsultaShodan # Puede ser IP o nombre de host
+        [string]$ConsultaShodan
     )
 
     Write-Host "`nConsultando Shodan para '$ConsultaShodan'..." -ForegroundColor Yellow
@@ -1084,7 +1123,7 @@ function Monitorear-Red-Shodan {
     } else {
          try {
             $ipAddress = ([System.Net.Dns]::GetHostAddresses($ConsultaShodan) | Where-Object {$_.AddressFamily -eq 'InterNetwork'} | Select-Object -First 1).IPAddressToString
-             if (-not $ipAddress) { $ipAddress = ([System.Net.Dns]::GetHostAddresses($ConsultaShodan) | Select-Object -First 1).IPAddressToString } # Fallback a IPv6 si no hay IPv4
+             if (-not $ipAddress) { $ipAddress = ([System.Net.Dns]::GetHostAddresses($ConsultaShodan) | Select-Object -First 1).IPAddressToString }
             Write-Host "Resolviendo '$ConsultaShodan' a '$ipAddress'" -ForegroundColor Gray
          } catch {
             Write-Error "No se pudo resolver '$ConsultaShodan' a una dirección IP. Shodan requiere una IP para esta función. Error: $($_.Exception.Message)"
@@ -1118,7 +1157,6 @@ function Monitorear-Red-Shodan {
 
         if ($response.ports) {
             Write-Host "`n Puertos Abiertos detectados por Shodan:" -ForegroundColor Green
-            # Convertir los puertos a un array de números para ordenar
             $portsArray = $response.ports | ForEach-Object {[int]$_} | Sort-Object
             Write-Host "  $($portsArray -join ', ')"
         } else {
@@ -1132,7 +1170,7 @@ function Monitorear-Red-Shodan {
             Write-Host "`n No hay vulnerabilidades conocidas listadas por Shodan." -ForegroundColor Green
         }
 
-        # Mostrar más detalles si están disponibles (ej. datos de servicios)
+        # Mostrar más detalles de servicios si están disponibles
         if ($response.data) {
             Write-Host "`n Detalles adicionales de Servicios:" -ForegroundColor White
             foreach ($service in $response.data) {
@@ -1141,9 +1179,8 @@ function Monitorear-Red-Shodan {
                 if ($service.product) { Write-Host "    Producto: $($service.product)" }
                 if ($service.version) { Write-Host "    Versión: $($service.version)" }
                 if ($service.os) { Write-Host "    OS detectado: $($service.os)" }
-                # Mostrar parte del banner si existe
                 if ($service.data) {
-                     $bannerSnippet = $service.data.split([Environment]::NewLine)[0] # Primera línea del banner
+                     $bannerSnippet = $service.data.split([Environment]::NewLine)[0]
                      Write-Host "    Banner (inicio): $bannerSnippet" -ForegroundColor Gray
                 }
                  Write-Host # Línea en blanco para separar servicios
@@ -1159,7 +1196,6 @@ function Monitorear-Red-Shodan {
             $statusCode = $_.Exception.Response.StatusCode.value__
             $errorMessage += " (Código de estado: $statusCode)."
             try {
-                 # Intentar parsear el cuerpo de la respuesta de error de Shodan (suele ser JSON)
                  $errorBody = $_.Exception.Response.GetResponseStream()
                  $reader = New-Object System.IO.StreamReader($errorBody)
                  $errorJson = $reader.ReadToEnd() | ConvertFrom-Json -ErrorAction SilentlyContinue
@@ -1204,10 +1240,9 @@ function Mostrar-Submenu2 {
         Write-Host "2.2 Monitorear con Shodan (IP Remota)"
         Write-Host "2.3 Configurar Timeout Escaneo Puertos (actual: $($Global:PuertoScanTimeout) ms)"
         Write-Host "2.4 Informe de Seguridad Local"
-        Write-Host "2.5 Configurar API Key Shodan (actual: $(if ($Global:ShodanApiKey -notmatch 'TU_API_KEY' -and -not [string]::IsNullOrWhiteSpace($Global:ShodanApiKey)) { 'Configurada' } else { 'NO Configurada' }))" # Nueva opción
+        Write-Host "2.5 Configurar API Key Shodan (actual: $(if ($Global:ShodanApiKey -notmatch 'TU_API_KEY' -and -not [string]::IsNullOrWhiteSpace($Global:ShodanApiKey)) { 'Configurada' } else { 'NO Configurada' }))"
         Write-Host "0. Volver al menú principal"
         Write-Host "-----------------------" -ForegroundColor Cyan
-        # Updated Read-Host prompt
         $subopcion = Read-Host "Elige una opción (0-5)"
         switch ($subopcion) {
             "1" {
@@ -1224,18 +1259,17 @@ function Mostrar-Submenu2 {
             }
             "3" {
                  $timeoutInput = Read-Host "Introduce el nuevo timeout para escaneo de puertos (en milisegundos, ej: 500)"
-                 # Initialize variable before TryParse
-                 [int]$timeoutInt = 0 # <-- Inicializar variable
-                 if ([int]::TryParse($timeoutInput, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$timeoutInt) -and $timeoutInt -gt 50) { # Poner un mínimo razonable
+                 [int]$timeoutInt = 0
+                 if ([int]::TryParse($timeoutInput, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$timeoutInt) -and $timeoutInt -gt 50) {
                      $Global:PuertoScanTimeout = $timeoutInt
                      Write-Host -ForegroundColor Green "Timeout configurado a $Global:PuertoScanTimeout ms."
-                     Guardar-Configuracion # Guardar cambio
+                     Guardar-Configuracion
                  } else {
                      Write-Warning "Entrada inválida. Ingresa un número entero positivo mayor que 50."
                  }
             }
             "4" { Obtener-InformeSeguridadLocal }
-            "5" { # Nueva opción para configurar Shodan API Key
+            "5" {
                  $apiKeyInput = Read-Host "Ingresa tu API Key de Shodan (dejar en blanco para no cambiar)"
                  if (-not [string]::IsNullOrWhiteSpace($apiKeyInput)) {
                      $Global:ShodanApiKey = $apiKeyInput.Trim()
@@ -1271,16 +1305,15 @@ do {
     Write-Host "`n================ MENÚ PRINCIPAL ================" -ForegroundColor Cyan
     Write-Host "1. Análisis de Archivos Locales"
     Write-Host "2. Análisis de Red (Local y Remoto)"
-    Write-Host "3. Ayuda (Usando Get-Help)" # Nueva opción 3
-    Write-Host "4. Ayuda (Información rápida en menú)" # Opción 4 ahora es la ayuda rápida
+    Write-Host "3. Ayuda (Usando Get-Help)"
+    Write-Host "4. Ayuda (Información rápida en menú)"
     Write-Host "5. Salir"
     Write-Host "================================================" -ForegroundColor Cyan
-    # Updated Read-Host prompt to include the new option 3
     $opcion = Read-Host "Elige una opción (1, 2, 3, 4, 5)"
     switch ($opcion) {
         "1" { Mostrar-Submenu1 }
         "2" { Mostrar-Submenu2 }
-        "3" { # Nueva opción 3: Get-Help
+        "3" {
             Write-Host "`n--- Ayuda con Get-Help ---" -ForegroundColor Green
             Write-Host "Para obtener ayuda detallada sobre este script o sus funciones:"
             Write-Host "1. Sal del menú interactivo (presiona 5)."
@@ -1292,27 +1325,28 @@ do {
             Write-Host "   Get-Help Escanear-ArchivosSospechosos" -ForegroundColor Yellow
             Write-Host ""
             Write-Host "Presiona Enter para volver al menú principal."
-            Read-Host | Out-Null # Esperar a que el usuario presione Enter
+            Read-Host | Out-Null
         }
-        "4" { # Opción 4: Ayuda rápida en menú
+        "4" {
             Write-Host "`n--- AYUDA DEL SISTEMA (Información rápida) ---" -ForegroundColor Green
             Write-Host "Para ayuda completa, usa la opción '3. Ayuda (Usando Get-Help)' y sigue las instrucciones."
             Write-Host "---------------------------------------------" -ForegroundColor Green
             Write-Host "1. Análisis de Archivos Locales:"
-            Write-Host "   1.1 Escanear: Busca archivos en la ruta local según criterios configurados."
+            Write-Host "   1.1 Escanear Archivos Sospechosos: Busca archivos según criterios configurados (el listado se ve con 1.3)."
             Write-Host "   1.2 Configurar: Ajusta criterios (extensión, ubicación, tamaño), ruta y API Key de VirusTotal."
-            Write-Host "   1.3 Ver Lista: Muestra los archivos sospechosos del último escaneo local."
-            Write-Host "   1.4 Enviar a VT: Consulta los hashes de la lista en VirusTotal (requiere API Key VT)."
-            Write-Host "   1.5 Eliminar: Permite borrar archivos de la lista local (¡con precaución!)."
-            Write-Host "   1.6 Listado Archivos Ocultos: Espacio reservado para futura funcionalidad." # Descripción de la nueva opción 1.6
+            Write-Host "   1.3 Ver Lista de Archivos Sospechosos: Muestra los archivos encontrados en el último escaneo (1.1)."
+            Write-Host "   1.4 Enviar a VT: Consulta los hashes de la lista de sospechosos (1.3) en VirusTotal (requiere API Key VT)."
+            Write-Host "   1.5 Eliminar: Permite borrar archivos de la lista de sospechosos (1.3) (¡con precaución!)."
+            Write-Host "   1.6 Listado de Archivos Ocultos: Busca archivos ocultos en una ruta y muestra el listado (también puede guardar)."
+            Write-Host "   1.7 Ver Lista de Archivos Ocultos: Muestra los archivos encontrados en el último listado (1.6)."
             Write-Host "2. Análisis de Red (Local y Remoto):"
             Write-Host "   2.1 Escaneo Puertos (Remoto): Intenta conectar a puertos comunes en una IP/host remoto."
             Write-Host "   2.2 Monitor Shodan (Remoto): Consulta info pública de una IP en Shodan (requiere API Key Shodan)."
             Write-Host "   2.3 Configurar Timeout: Ajusta el tiempo de espera para el escaneo de puertos remotos."
             Write-Host "   2.4 Informe Local: Muestra info de seguridad de la máquina actual (políticas, UAC, firewall, puertos locales)."
             Write-Host "   2.5 Configurar API Key Shodan: Establece la clave necesaria para usar la opción 2.2."
-            Write-Host "3. Ayuda (Usando Get-Help): Muestra instrucciones sobre cómo usar Get-Help." # Descripción de la nueva opción 3
-            Write-Host "4. Ayuda (Información rápida): Muestra esta explicación dentro del menú." # Descripción actualizada de la opción 4
+            Write-Host "3. Ayuda (Usando Get-Help): Muestra instrucciones sobre cómo usar Get-Help."
+            Write-Host "4. Ayuda (Información rápida): Muestra esta explicación dentro del menú."
             Write-Host "5. Salir: Cierra la herramienta."
             Write-Host "--------------------------" -ForegroundColor Green
         }
