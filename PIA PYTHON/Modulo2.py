@@ -1,6 +1,6 @@
 import requests
 def Ipabuse():
-    API_KEY="794cc263cae09b0c717631035693f73449c2b59e829ff4383094675fdec241e29cab5c1329d7af7c"
+    API_KEY=input("Ingresa tu API-KEY:\n")
     direccion_ip=input("Ingresa la direccion ip a revisar:\n")
     url="https://api.abuseipdb.com/api/v2/check"
 
