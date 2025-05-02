@@ -2,7 +2,7 @@ import requests
 import time
 
 def virustotalarchivos():#Angel
-    API_KEY="431e0c72ad0fd5453878d25831df7db67db3036cc6599b173e80dddc81269382"
+    API_KEY=input("Ingresa tu API-KEY:\n")
     URL="https://www.virustotal.com/api/v3/files"
     HEADERS={'x-apikey': API_KEY}
 
