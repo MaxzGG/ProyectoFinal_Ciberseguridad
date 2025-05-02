@@ -10,6 +10,7 @@
     # Requisitos del módulo
     PowerShellVersion = '5.1'
     FunctionsToExport = @('Get-HiddenFiles')
+    Ejemplo de uso: Get-HiddenFiles -Path "C:\AAA\BBB\CCC"
     
     # Opciones de importación
     RootModule = 'archivosocultos.psm1'
