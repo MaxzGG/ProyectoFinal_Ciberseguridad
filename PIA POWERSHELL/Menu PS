@@ -1,0 +1,214 @@
+# Inicializar configuración global por defecto
+if (-not $Global:ShodanApiKey) { $Global:ShodanApiKey = $null }
+if (-not $Global:PuertoScanTimeout) { $Global:PuertoScanTimeout = 300 }
+if (-not $Global:PuertosComunes) {
+    $Global:PuertosComunes = @(21,22,23,25,53,80,110,135,139,143,443,445,3389,5900,8080)
+}
+
+function Mostrar-Submenu1 {
+    do {
+        Write-Host "`nAnálisis de Archivos:"
+        Write-Host "1.1 Escanear Archivos"
+        Write-Host "1.2 Configurar Filtros"
+        Write-Host "1.3 Ver Lista de Sospechosos"
+        Write-Host "1.4 Enviar a VirusTotal"
+        Write-Host "1.5 Eliminar Archivos Maliciosos"
+        Write-Host "0. Volver al menú principal"
+        $subopcion = Read-Host "Elige una subopción (0-5)"
+        switch ($subopcion) {
+            "1" { Write-Host "Seleccionaste Escanear Archivos." }
+            "2" { Write-Host "Seleccionaste Configurar Filtros." }
+            "3" { Write-Host "Seleccionaste Ver Lista de Sospechosos." }
+            "4" { Write-Host "Seleccionaste Enviar a VirusTotal." }
+            "5" { Write-Host "Seleccionaste Eliminar Archivos Maliciosos." }
+            "0" { return }
+            default { Write-Host -ForegroundColor Red "Subopción inválida. Intenta de nuevo (0-5)." }
+        }
+    } while ($true)
+}
+
+function Escanear-PuertosComunes {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$HostName,
+        [int]$TimeoutMs = 300
+    )
+
+    if ($HostName -notmatch '^(?!:\/\/)([a-zA-Z0-9\-\.]+)$') {
+        Write-Host -ForegroundColor Red "Formato de host/IP inválido."
+        return
+    }
+
+    Write-Host "`nEscaneando puertos comunes en el host: $HostName (Timeout: $($TimeoutMs)ms)..."
+    Write-Host "================================================="
+
+    foreach ($Puerto in $Global:PuertosComunes) {
+        try {
+            $Socket = New-Object System.Net.Sockets.TcpClient
+            $Resultado = $Socket.BeginConnect($HostName, $Puerto, $null, $null)
+            $TimeOut = $Resultado.AsyncWaitHandle.WaitOne($TimeoutMs)
+            if ($Resultado.IsCompleted) {
+                $Socket.EndConnect($Resultado)
+                Write-Host "Puerto $Puerto (TCP) está abierto en $HostName"
+            } else {
+                Write-Host "Puerto $Puerto (TCP) está cerrado o no responde en $HostName" -ForegroundColor Yellow
+            }
+        }
+        catch {
+            Write-Host "Error al intentar conectar al puerto $Puerto en $HostName." -ForegroundColor Red
+            Write-Host "Detalles del error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+        finally {
+            if ($Socket -ne $null -and $Socket.Connected) {
+                $Socket.Close()
+            }
+        }
+    }
+
+    Write-Host "================================================="
+    Write-Host "Escaneo de puertos comunes completado."
+}
+
+function Monitorear-Red-Shodan {
+    param([Parameter(Mandatory=$true)][string]$ConsultaShodan)
+    if (-not $Global:ShodanApiKey) {
+        Write-Host -ForegroundColor Red "Error: La clave de API de Shodan no está configurada."
+        return
+    }
+    $Uri = "https://api.shodan.io/shodan/host/$ConsultaShodan?key=$Global:ShodanApiKey"
+    Write-Host "`nRealizando consulta en Shodan para: $ConsultaShodan..."
+    Write-Host "================================================="
+    try {
+        $Respuesta = Invoke-RestMethod -Uri $Uri -Method Get
+        if ($Respuesta) {
+            Write-Host "Información encontrada en Shodan:" -ForegroundColor Green
+            Write-Host "  IP: $($Respuesta.ip_str)"
+            Write-Host "  Organización: $($Respuesta.org)"
+            Write-Host "  País: $($Respuesta.country_name)"
+            Write-Host "  Ciudad: $($Respuesta.city)"
+            Write-Host "  Latitud: $($Respuesta.latitude)"
+            Write-Host "  Longitud: $($Respuesta.longitude)"
+            Write-Host "  Sistema Operativo: $($Respuesta.os)"
+            Write-Host "`nServicios Abiertos:" -ForegroundColor Green
+            if ($Respuesta.ports) {
+                if ($Respuesta.ports.Count -gt 0) {
+                    foreach ($Puerto in $Respuesta.ports) {
+                        Write-Host "    Puerto: $Puerto"
+                    }
+                } else {
+                    Write-Host "    No se encontraron puertos abiertos." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "    No se encontraron puertos abiertos." -ForegroundColor Yellow
+            }
+            Write-Host "`nBanners:" -ForegroundColor Green
+            if ($Respuesta.data) {
+                if ($Respuesta.data.Count -gt 0) {
+                    foreach ($Banner in $Respuesta.data) {
+                        Write-Host "  -------------------------"
+                        Write-Host "    Puerto: $($Banner.port)"
+                        Write-Host "    Protocolo: $($Banner.transport)"
+                        Write-Host "    Banner:"
+                        Write-Host "    $($Banner.data)"
+                    }
+                } else {
+                    Write-Host "    No se encontraron banners." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "    No se encontraron banners." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "No se encontró información en Shodan." -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host "Error al consultar Shodan: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    Write-Host "================================================="
+}
+
+function Mostrar-Submenu2 {
+    do {
+        Write-Host "`nAnálisis de Red:"
+        Write-Host "2.1 Escaneo de Puertos Comunes"
+        Write-Host "2.2 Monitorear Red con Shodan"
+        Write-Host "2.3 Configurar Timeout de Escaneo"
+        Write-Host "0. Volver al menú principal"
+        $subopcion = Read-Host "Elige una subopción (0-3)"
+        switch ($subopcion) {
+            "1" {
+                $hostObjetivo = Read-Host "Introduce la dirección IP o nombre de host a escanear"
+                Escanear-PuertosComunes -HostName $hostObjetivo -TimeoutMs $Global:PuertoScanTimeout
+            }
+            "2" {
+                $consulta = Read-Host "Introduce la dirección IP o consulta de Shodan a monitorear"
+                Monitorear-Red-Shodan -ConsultaShodan $consulta
+            }
+            "3" {
+                $timeoutInput = Read-Host "Introduce el timeout para escaneo (ms)"
+                if ($timeoutInput -match '^\d+$') {
+                    $Global:PuertoScanTimeout = [int]$timeoutInput
+                    Write-Host -ForegroundColor Green "Timeout configurado a $Global:PuertoScanTimeout ms."
+                } else {
+                    Write-Host -ForegroundColor Red "Entrada inválida. Ingresa un número."
+                }
+            }
+            "0" { return }
+            default { Write-Host -ForegroundColor Red "Subopción inválida." }
+        }
+    } while ($true)
+}
+
+function Mostrar-Submenu3 {
+    do {
+        Write-Host "`nConfiguración:"
+        Write-Host "3.1 Establecer Ubicaciones 'Raras' (Función a implementar)"
+        Write-Host "3.2 Añadir Extensiones Peligrosas (Función a implementar)"
+        Write-Host "3.3 Configurar API Key de Shodan"
+        Write-Host "0. Volver al menú principal"
+        $subopcion = Read-Host "Elige una subopción (0-3)"
+        switch ($subopcion) {
+            "1" { Write-Host "# TODO: Implementar función para detectar ubicaciones inusuales de archivos ejecutables" }
+            "2" { Write-Host "# TODO: Implementar función para añadir extensiones potencialmente peligrosas" }
+            "3" {
+                $shodanKey = Read-Host -Prompt "Introduce tu API Key de Shodan"
+                if ($shodanKey -and $shodanKey.Trim() -ne "") {
+                    $Global:ShodanApiKey = $shodanKey.Trim()
+                    Write-Host -ForegroundColor Green "Clave de API de Shodan configurada."
+                } else {
+                    Write-Host -ForegroundColor Red "La clave de API no puede estar vacía."
+                }
+            }
+            "0" { return }
+            default { Write-Host -ForegroundColor Red "Subopción inválida." }
+        }
+    } while ($true)
+}
+
+do {
+    Write-Host "`n================ MENÚ PRINCIPAL ================" -ForegroundColor Cyan
+    Write-Host "1. Análisis de Archivos"
+    Write-Host "2. Análisis de Red"
+    Write-Host "3. Configuración"
+    Write-Host "4. Ayuda (Qué hace cada cosa)"
+    Write-Host "5. Salir"
+    Write-Host "================================================" -ForegroundColor Cyan
+    $opcion = Read-Host "Elige una opción (1-5)"
+    switch ($opcion) {
+        "1" { Mostrar-Submenu1 }
+        "2" { Mostrar-Submenu2 }
+        "3" { Mostrar-Submenu3 }
+        "4" {
+            Write-Host "`nAYUDA DEL SISTEMA:"
+            Write-Host "1. Análisis de Archivos:`n    - Escanea, filtra y gestiona archivos sospechosos."
+            Write-Host "2. Análisis de Red:`n    - Escanea puertos y consulta datos en Shodan."
+            Write-Host "3. Configuración:`n    - Personaliza filtros, extensiones y claves API."
+            Write-Host "4. Ayuda:`n    - Muestra esta explicación sobre el sistema."
+            Write-Host "5. Salir:`n    - Cierra la herramienta."
+        }
+        "5" { Write-Host "Saliendo del programa..." -ForegroundColor Green }
+        default { Write-Host -ForegroundColor Red "Opción inválida. Intenta de nuevo (1-5)." }
+    }
+} while ($opcion -ne "5")
+
+# ////////////////////////
