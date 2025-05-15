@@ -1,0 +1,46 @@
+﻿{
+    "TamañoMinimoMB":  0.02,
+    "PuntajeUmbral":  2,
+    "VirusTotalApiKey":  "431e0c72ad0fd5453878d25831df7db67db3036cc6599b173e80dddc81269382",
+    "ExtensionesSospechosas":  [
+                                   ".exe",
+                                   ".scr",
+                                   ".bat",
+                                   ".cmd",
+                                   ".ps1",
+                                   ".vbs",
+                                   ".js",
+                                   ".lnk"
+                               ],
+    "TamañoMaximoMB":  100,
+    "PuertosComunes":  [
+                           21,
+                           22,
+                           23,
+                           25,
+                           53,
+                           80,
+                           110,
+                           111,
+                           135,
+                           139,
+                           143,
+                           443,
+                           445,
+                           993,
+                           995,
+                           1723,
+                           3306,
+                           3389,
+                           5900,
+                           8080
+                       ],
+    "UbicacionesSospechosas":  [
+                                   "C:\\Users\\Public",
+                                   "C:\\Users\\angel\\AppData\\Local\\Temp",
+                                   "C:\\Users\\angel\\AppData\\Roaming"
+                               ],
+    "RutaEscaneo":  "C:\\Users\\Public",
+    "ShodanApiKey":  "jsYZ968byb9RN4a0sHcwKrMqrag38MH5",
+    "PuertoScanTimeout":  500
+}
