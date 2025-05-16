@@ -3,7 +3,7 @@ import requests
 
 def shodan():
     while True :
-        API_key = "vVw4W7B0SpHBir2Rl8WKbfikusZvsgOx"
+        API_key = ""
 
         print("----/ Buscador de Ip en shodan \----\n1) Buscar ip\n2) Salir")
         opcion = input("Escoger una opcion: ")
