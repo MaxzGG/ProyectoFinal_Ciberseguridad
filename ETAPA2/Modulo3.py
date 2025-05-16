@@ -3,7 +3,7 @@ import requests
 import json
 
 def vulnerabilidades():
-    API_KEY="e5d45570-5fd0-47c4-b31b-ba728b422930"
+    API_KEY=""
     Sistema=input("Ingresa el SO:\n")
     URL="https://services.nvd.nist.gov/rest/json/cves/2.0"
     
