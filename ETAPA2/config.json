@@ -1,7 +1,7 @@
 ﻿{
     "TamañoMinimoMB":  0.02,
     "PuntajeUmbral":  2,
-    "VirusTotalApiKey":  "431e0c72ad0fd5453878d25831df7db67db3036cc6599b173e80dddc81269382",
+    "VirusTotalApiKey":  "",
     "ExtensionesSospechosas":  [
                                    ".exe",
                                    ".scr",
@@ -41,6 +41,6 @@
                                    "C:\\Users\\angel\\AppData\\Roaming"
                                ],
     "RutaEscaneo":  "C:\\Users\\Public",
-    "ShodanApiKey":  "jsYZ968byb9RN4a0sHcwKrMqrag38MH5",
+    "ShodanApiKey":  "",
     "PuertoScanTimeout":  500
 }
