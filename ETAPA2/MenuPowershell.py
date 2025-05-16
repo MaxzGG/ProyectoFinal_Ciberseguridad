@@ -10,10 +10,9 @@ def MenuPowershell():
         text=True    
     )
     print("Salida Output")
-    # Leemos la salida en tiempo real línea por línea
     for linea in proceso.stdout:
-        print(linea, end='')  # ya incluye salto de línea
-    
+        print(linea, end='') 
+   
     print("\nErrores (En caso de haber):")
     for error in proceso.stderr:
         print(error, end='')
